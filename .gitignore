@@ -1,0 +1,57 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# Fabric Loom / mod dev caches
+.loom/
+remappedSrc/
+*.launch
+
+# Minecraft run folders (created by runClient / runServer)
+run/
+runs/
+run-data/
+server-run/
+
+# Local mod dependencies (drop jars like bbs-*.jar in manually, don't commit them)
+libs/*.jar
+
+# Data generation output
+src/generated/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+.metadata/
+
+# VS Code
+.vscode/
+
+# Compiled classes and archives (but NOT gradle/wrapper/gradle-wrapper.jar)
+*.class
+*.war
+*.ear
+*.zip
+*.tar.gz
+
+# Java crash reports and logs
+hs_err_pid*
+replay_pid*
+*.log
+logs/
+crash-reports/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini

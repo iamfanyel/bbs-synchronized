@@ -1,0 +1,34 @@
+{
+    "schemaVersion": 1,
+    "id": "bbs_synchronized",
+    "version": "${version}",
+    "name": "BBS Synchronized",
+    "description": "Server-side model synchronization for BBS: distributes models to players — all through a fully asynchronous transfer pipeline.",
+    "authors": [
+        "imFanyel"
+    ],
+    "license": "MIT",
+    "icon": "assets/bbs_synchronized/icon.png",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "imfanyel.bbs_synchronized.BBSSynchronized"
+        ],
+        "client": [
+            "imfanyel.bbs_synchronized.BBSSynchronizedClient"
+        ]
+    },
+    "mixins": [
+        {
+            "config": "bbs_synchronized.client.mixins.json",
+            "environment": "client"
+        }
+    ],
+    "depends": {
+        "fabricloader": ">=0.15.0",
+        "minecraft": "~1.20.4",
+        "java": ">=17",
+        "fabric-api": "*",
+        "bbs": "*"
+    }
+}

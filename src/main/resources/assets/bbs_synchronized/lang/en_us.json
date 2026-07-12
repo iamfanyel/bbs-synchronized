@@ -1,0 +1,29 @@
+{
+    "bbs_synchronized.prefix": "[BBS Synchronized] ",
+
+    "bbs_synchronized.command.players_only": "Only players can use this command.",
+    "bbs_synchronized.command.not_installed": "BBS Synchronized isn't installed on your client, so models can't be synchronized.",
+    "bbs_synchronized.command.checking": "Checking for new models...",
+    "bbs_synchronized.command.uploading": "Uploading your new models...",
+
+    "bbs_synchronized.broadcast.uploaded": "%s uploaded %s model file(s). Use %s to receive them.",
+
+    "bbs_synchronized.sync.in_progress": "A synchronization is already in progress...",
+    "bbs_synchronized.sync.up_to_date": "Models are up to date!",
+    "bbs_synchronized.sync.downloading": "Downloading %s model file(s) (%s MB)...",
+    "bbs_synchronized.sync.progress": "Downloaded %s/%s files...",
+    "bbs_synchronized.sync.done": "Synchronized %s model file(s)!",
+    "bbs_synchronized.sync.timeout": "Model download timed out — you can retry with /bbs model reload.",
+    "bbs_synchronized.sync.verify_failed": "Failed to verify \"%s\" — it was discarded.",
+
+    "bbs_synchronized.upload.skipped": "Skipped \"%s\" — it already exists on the server with different contents.",
+    "bbs_synchronized.upload.rejected": "The server rejected \"%s\".",
+    "bbs_synchronized.upload.nothing": "No new models to upload — the server already has all of your model files.",
+    "bbs_synchronized.upload.uploading": "Uploading %s model file(s) (%s MB)...",
+    "bbs_synchronized.upload.done": "Upload complete — sent %s file(s).",
+    "bbs_synchronized.upload.failed": "Upload failed: %s",
+
+    "bbs_synchronized.ui.section": "Server Sync",
+    "bbs_synchronized.ui.reload": "Reload",
+    "bbs_synchronized.ui.upload": "Upload"
+}
