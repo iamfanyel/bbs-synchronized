@@ -2,6 +2,7 @@ package imfanyel.bbs_synchronized.client;
 
 import imfanyel.bbs_synchronized.BBSSynchronized;
 import imfanyel.bbs_synchronized.network.SyncPackets;
+import imfanyel.bbs_synchronized.network.SyncPayload;
 import imfanyel.bbs_synchronized.sync.HashCache;
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
 import imfanyel.bbs_synchronized.sync.SyncExecutors;
@@ -14,7 +15,6 @@ import mchorse.bbs_mod.resources.Link;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.text.Text;
@@ -96,89 +96,54 @@ public class ClientModelSync
         workers = SyncExecutors.workers("BBS-Sync-Client-Worker");
         io = SyncExecutors.orderedIo("BBS-Sync-Client-IO");
 
-        ClientPlayNetworking.registerGlobalReceiver(SyncPackets.MANIFEST, (client, handler, buf, responder) ->
+        ClientPlayNetworking.registerGlobalReceiver(SyncPayload.ID, (payload, context) ->
         {
-            byte reason = buf.readByte();
-            boolean last = buf.readBoolean();
+            PacketByteBuf buf = SyncPackets.wrap(payload.data());
 
-            if (manifestBuffer.size() < SyncPackets.MAX_FILES)
+            switch (payload.channel())
             {
-                manifestBuffer.addAll(SyncPackets.readManifest(buf));
-            }
+                case SyncPackets.CH_MANIFEST -> receiveManifestSlice(buf);
+                case SyncPackets.CH_FILE_BEGIN ->
+                {
+                    int tid = buf.readInt();
+                    String path = buf.readString();
+                    long size = buf.readLong();
+                    String sha1 = buf.readString();
 
-            if (!last)
-            {
-                return;
-            }
+                    io.submit(() -> beginDownload(tid, path, size, sha1));
+                }
+                case SyncPackets.CH_FILE_DATA ->
+                {
+                    int tid = buf.readInt();
+                    byte[] data = buf.readByteArray();
 
-            List<ManifestEntry> manifest = new ArrayList<>(manifestBuffer);
+                    io.submit(() -> downloadData(tid, data));
+                }
+                case SyncPackets.CH_FILE_END ->
+                {
+                    int tid = buf.readInt();
 
-            manifestBuffer.clear();
-            BBSSynchronized.LOGGER.info("Received server model manifest with {} file(s)", manifest.size());
-            workers.submit(() -> handleManifest(reason, manifest));
-        });
+                    io.submit(() -> endDownload(tid));
+                }
+                case SyncPackets.CH_BATCH_DONE -> io.submit(ClientModelSync::finishBatch);
+                case SyncPackets.CH_UPLOAD_GO -> receiveUploadGoSlice(buf);
+                case SyncPackets.CH_UPLOAD_ACK ->
+                {
+                    buf.readInt();
 
-        ClientPlayNetworking.registerGlobalReceiver(SyncPackets.FILE_BEGIN, (client, handler, buf, responder) ->
-        {
-            int tid = buf.readInt();
-            String path = buf.readString();
-            long size = buf.readLong();
-            String sha1 = buf.readString();
+                    byte status = buf.readByte();
+                    String path = buf.readString();
 
-            io.submit(() -> beginDownload(tid, path, size, sha1));
-        });
-
-        ClientPlayNetworking.registerGlobalReceiver(SyncPackets.FILE_DATA, (client, handler, buf, responder) ->
-        {
-            int tid = buf.readInt();
-            byte[] data = buf.readByteArray();
-
-            io.submit(() -> downloadData(tid, data));
-        });
-
-        ClientPlayNetworking.registerGlobalReceiver(SyncPackets.FILE_END, (client, handler, buf, responder) ->
-        {
-            int tid = buf.readInt();
-
-            io.submit(() -> endDownload(tid));
-        });
-
-        ClientPlayNetworking.registerGlobalReceiver(SyncPackets.BATCH_DONE, (client, handler, buf, responder) -> io.submit(ClientModelSync::finishBatch));
-
-        ClientPlayNetworking.registerGlobalReceiver(SyncPackets.UPLOAD_GO, (client, handler, buf, responder) ->
-        {
-            boolean last = buf.readBoolean();
-
-            if (uploadGoBuffer.size() < SyncPackets.MAX_FILES)
-            {
-                uploadGoBuffer.addAll(SyncPackets.readManifest(buf));
-            }
-
-            if (!last)
-            {
-                return;
-            }
-
-            List<ManifestEntry> manifest = new ArrayList<>(uploadGoBuffer);
-
-            uploadGoBuffer.clear();
-            workers.submit(() -> handleUploadRequest(manifest));
-        });
-
-        ClientPlayNetworking.registerGlobalReceiver(SyncPackets.UPLOAD_ACK, (client, handler, buf, responder) ->
-        {
-            buf.readInt();
-
-            byte status = buf.readByte();
-            String path = buf.readString();
-
-            if (status == SyncPackets.ACK_SKIPPED)
-            {
-                message(Formatting.YELLOW, "bbs_synchronized.upload.skipped", path);
-            }
-            else if (status == SyncPackets.ACK_FAILED)
-            {
-                message(Formatting.RED, "bbs_synchronized.upload.rejected", path);
+                    if (status == SyncPackets.ACK_SKIPPED)
+                    {
+                        message(Formatting.YELLOW, "bbs_synchronized.upload.skipped", path);
+                    }
+                    else if (status == SyncPackets.ACK_FAILED)
+                    {
+                        message(Formatting.RED, "bbs_synchronized.upload.rejected", path);
+                    }
+                }
+                default -> {}
             }
         });
 
@@ -203,12 +168,12 @@ public class ClientModelSync
                 {
                     sentHello = true;
                 }
-                else if (joinTicks >= 40 && joinTicks % 20 == 0 && ClientPlayNetworking.canSend(SyncPackets.HELLO))
+                else if (joinTicks >= 40 && joinTicks % 20 == 0 && ClientPlayNetworking.canSend(SyncPayload.ID))
                 {
                     sentHello = true;
 
                     BBSSynchronized.LOGGER.info("Requesting model manifest from the server");
-                    ClientPlayNetworking.send(SyncPackets.HELLO, PacketByteBufs.create());
+                    ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_HELLO, null));
                 }
             }
 
@@ -227,6 +192,51 @@ public class ClientModelSync
                 });
             }
         });
+    }
+
+    /* Payload handlers run on the render thread, so the slice accumulators
+     * below are only ever touched from one thread. */
+
+    private static void receiveManifestSlice(PacketByteBuf buf)
+    {
+        byte reason = buf.readByte();
+        boolean last = buf.readBoolean();
+
+        if (manifestBuffer.size() < SyncPackets.MAX_FILES)
+        {
+            manifestBuffer.addAll(SyncPackets.readManifest(buf));
+        }
+
+        if (!last)
+        {
+            return;
+        }
+
+        List<ManifestEntry> manifest = new ArrayList<>(manifestBuffer);
+
+        manifestBuffer.clear();
+        BBSSynchronized.LOGGER.info("Received server model manifest with {} file(s)", manifest.size());
+        workers.submit(() -> handleManifest(reason, manifest));
+    }
+
+    private static void receiveUploadGoSlice(PacketByteBuf buf)
+    {
+        boolean last = buf.readBoolean();
+
+        if (uploadGoBuffer.size() < SyncPackets.MAX_FILES)
+        {
+            uploadGoBuffer.addAll(SyncPackets.readManifest(buf));
+        }
+
+        if (!last)
+        {
+            return;
+        }
+
+        List<ManifestEntry> manifest = new ArrayList<>(uploadGoBuffer);
+
+        uploadGoBuffer.clear();
+        workers.submit(() -> handleUploadRequest(manifest));
     }
 
     private static void reset()
@@ -348,19 +358,16 @@ public class ClientModelSync
         /* The request list can exceed the 32 KiB serverbound packet limit,
          * so it's sent as chunked slices */
         SyncPackets.chunkPaths(needed, SyncPackets.SAFE_C2S_BYTES, (slice, last) ->
-        {
-            PacketByteBuf buf = PacketByteBufs.create();
-
-            buf.writeBoolean(last);
-            buf.writeInt(slice.size());
-
-            for (String path : slice)
+            ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_REQUEST_FILES, (buf) ->
             {
-                buf.writeString(path);
-            }
+                buf.writeBoolean(last);
+                buf.writeInt(slice.size());
 
-            ClientPlayNetworking.send(SyncPackets.REQUEST_FILES, buf);
-        });
+                for (String path : slice)
+                {
+                    buf.writeString(path);
+                }
+            })));
     }
 
     private static void beginDownload(int tid, String path, long size, String sha1)
@@ -551,14 +558,15 @@ public class ClientModelSync
 
                 tid += 1;
 
-                PacketByteBuf begin = PacketByteBufs.create();
+                final int fileTid = tid;
 
-                begin.writeInt(tid);
-                begin.writeString(entry.path);
-                begin.writeLong(file.length());
-                begin.writeString(entry.sha1);
-
-                ClientPlayNetworking.send(SyncPackets.UP_BEGIN, begin);
+                ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_BEGIN, (begin) ->
+                {
+                    begin.writeInt(fileTid);
+                    begin.writeString(entry.path);
+                    begin.writeLong(file.length());
+                    begin.writeString(entry.sha1);
+                }));
 
                 try (InputStream in = new FileInputStream(file))
                 {
@@ -568,16 +576,14 @@ public class ClientModelSync
 
                     while ((read = in.read(buffer)) > 0)
                     {
-                        PacketByteBuf chunk = PacketByteBufs.create();
+                        final int chunkLength = read;
 
-                        chunk.writeInt(tid);
-
-                        /* Same wire format as writeByteArray (varint length +
-                         * bytes), without copying the buffer into a new array */
-                        chunk.writeVarInt(read);
-                        chunk.writeBytes(buffer, 0, read);
-
-                        ClientPlayNetworking.send(SyncPackets.UP_DATA, chunk);
+                        ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_DATA, (chunk) ->
+                        {
+                            chunk.writeInt(fileTid);
+                            chunk.writeVarInt(chunkLength);
+                            chunk.writeBytes(buffer, 0, chunkLength);
+                        }));
 
                         /* Pace big uploads so the connection stays responsive */
                         if (++chunks % 32 == 0)
@@ -587,15 +593,12 @@ public class ClientModelSync
                     }
                 }
 
-                PacketByteBuf end = PacketByteBufs.create();
-
-                end.writeInt(tid);
-                ClientPlayNetworking.send(SyncPackets.UP_END, end);
+                ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_END, (end) -> end.writeInt(fileTid)));
 
                 sent += 1;
             }
 
-            ClientPlayNetworking.send(SyncPackets.UP_DONE, PacketByteBufs.empty());
+            ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_DONE, null));
 
             message(Formatting.GREEN, "bbs_synchronized.upload.done", sent);
         }

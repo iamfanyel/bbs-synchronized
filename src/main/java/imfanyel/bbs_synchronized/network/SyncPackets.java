@@ -1,66 +1,67 @@
 package imfanyel.bbs_synchronized.network;
 
-import imfanyel.bbs_synchronized.BBSSynchronized;
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
+import io.netty.buffer.Unpooled;
 import net.minecraft.network.PacketByteBuf;
-import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.ToIntFunction;
 
 /**
- * Channel identifiers and shared wire helpers of the BBS Synchronized protocol.
+ * Channel constants and shared wire helpers of the BBS Synchronized protocol.
  *
- * <p>All file payloads are chunked so that every packet stays well below the
- * 32767 byte limit of serverbound custom payloads (the tighter of the two
+ * <p>All logical channels travel through the single {@link SyncPayload};
+ * file payloads are chunked so that every packet stays well below the 32767
+ * byte limit of serverbound custom payloads (the tighter of the two
  * directions). Transfers are identified by an integer transfer id so multiple
  * files can be tracked independently and recovered gracefully.</p>
  */
 public class SyncPackets
 {
-    /* Clientbound (S2C) */
+    /* Clientbound (S2C) channels */
 
     /** Server model manifest slice: reason byte, last flag, entries */
-    public static final Identifier MANIFEST = new Identifier(BBSSynchronized.MOD_ID, "manifest");
+    public static final int CH_MANIFEST = 1;
 
     /** File download stream: begin (tid, path, size, sha1) */
-    public static final Identifier FILE_BEGIN = new Identifier(BBSSynchronized.MOD_ID, "file_begin");
+    public static final int CH_FILE_BEGIN = 2;
 
     /** File download stream: data (tid, bytes) */
-    public static final Identifier FILE_DATA = new Identifier(BBSSynchronized.MOD_ID, "file_data");
+    public static final int CH_FILE_DATA = 3;
 
     /** File download stream: end (tid) */
-    public static final Identifier FILE_END = new Identifier(BBSSynchronized.MOD_ID, "file_end");
+    public static final int CH_FILE_END = 4;
 
-    /** All requested files were streamed (empty payload) */
-    public static final Identifier BATCH_DONE = new Identifier(BBSSynchronized.MOD_ID, "batch_done");
+    /** All requested files were streamed (empty body) */
+    public static final int CH_BATCH_DONE = 5;
 
     /** Server asks the client to start an upload: last flag, manifest slice */
-    public static final Identifier UPLOAD_GO = new Identifier(BBSSynchronized.MOD_ID, "upload_go");
+    public static final int CH_UPLOAD_GO = 6;
 
     /** Per-file upload result: tid, status byte, path */
-    public static final Identifier UPLOAD_ACK = new Identifier(BBSSynchronized.MOD_ID, "upload_ack");
+    public static final int CH_UPLOAD_ACK = 7;
 
-    /* Serverbound (C2S) */
+    /* Serverbound (C2S) channels */
 
-    /** Client announces itself and asks for the join manifest */
-    public static final Identifier HELLO = new Identifier(BBSSynchronized.MOD_ID, "hello");
+    /** Client announces itself and asks for the join manifest (empty body) */
+    public static final int CH_HELLO = 8;
 
     /** Client requests files from the manifest: last flag, path slice */
-    public static final Identifier REQUEST_FILES = new Identifier(BBSSynchronized.MOD_ID, "request_files");
+    public static final int CH_REQUEST_FILES = 9;
 
     /** File upload stream: begin (tid, path, size, sha1) */
-    public static final Identifier UP_BEGIN = new Identifier(BBSSynchronized.MOD_ID, "up_begin");
+    public static final int CH_UP_BEGIN = 10;
 
     /** File upload stream: data (tid, bytes) */
-    public static final Identifier UP_DATA = new Identifier(BBSSynchronized.MOD_ID, "up_data");
+    public static final int CH_UP_DATA = 11;
 
     /** File upload stream: end (tid) */
-    public static final Identifier UP_END = new Identifier(BBSSynchronized.MOD_ID, "up_end");
+    public static final int CH_UP_END = 12;
 
-    /** Client finished its upload batch (empty payload) */
-    public static final Identifier UP_DONE = new Identifier(BBSSynchronized.MOD_ID, "up_done");
+    /** Client finished its upload batch (empty body) */
+    public static final int CH_UP_DONE = 13;
 
     /* Manifest reasons */
     public static final byte REASON_JOIN = 0;
@@ -92,6 +93,32 @@ public class SyncPackets
 
     /** Hard cap of files per manifest / request / upload batch */
     public static final int MAX_FILES = 8192;
+
+    /** Build a payload for the given channel; a null writer means an empty body */
+    public static SyncPayload make(int channel, Consumer<PacketByteBuf> writer)
+    {
+        if (writer == null)
+        {
+            return new SyncPayload(channel, new byte[0]);
+        }
+
+        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+
+        writer.accept(buf);
+
+        byte[] data = new byte[buf.readableBytes()];
+
+        buf.readBytes(data);
+        buf.release();
+
+        return new SyncPayload(channel, data);
+    }
+
+    /** View a payload body as a readable packet buffer */
+    public static PacketByteBuf wrap(byte[] data)
+    {
+        return new PacketByteBuf(Unpooled.wrappedBuffer(data));
+    }
 
     public static void writeManifest(PacketByteBuf buf, List<ManifestEntry> entries)
     {

@@ -45,16 +45,16 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 17
+	it.options.release = 21
 }
 
 java {
-	// Pin the compile toolchain to Java 17 regardless of the JVM running
+	// Pin the compile toolchain to Java 21 regardless of the JVM running
 	// Gradle; the foojay resolver (settings.gradle) downloads it if missing
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
+		languageVersion = JavaLanguageVersion.of(21)
 	}
 
-	sourceCompatibility = JavaVersion.VERSION_17
-	targetCompatibility = JavaVersion.VERSION_17
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
 }
