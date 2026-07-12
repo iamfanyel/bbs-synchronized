@@ -3,7 +3,7 @@
     "id": "bbs_synchronized",
     "version": "${version}",
     "name": "BBS Synchronized",
-    "description": "Server-side model synchronization for BBS: distributes models to players — all through a fully asynchronous transfer pipeline.",
+    "description": "Server-side model synchronization for BBS: distributes models to players.",
     "authors": [
         "imFanyel"
     ],
