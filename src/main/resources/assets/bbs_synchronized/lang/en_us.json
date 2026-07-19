@@ -13,7 +13,7 @@
     "bbs_synchronized.sync.downloading": "Downloading %s model file(s) (%s MB)...",
     "bbs_synchronized.sync.progress": "Downloaded %s/%s files...",
     "bbs_synchronized.sync.done": "Synchronized %s model file(s)!",
-    "bbs_synchronized.sync.timeout": "Model download timed out — you can retry with /bbs model reload.",
+    "bbs_synchronized.sync.timeout": "Model download timed out — you can retry with /bbs model download.",
     "bbs_synchronized.sync.verify_failed": "Failed to verify \"%s\" — it was discarded.",
 
     "bbs_synchronized.upload.skipped": "Skipped \"%s\" — it already exists on the server with different contents.",
@@ -24,6 +24,6 @@
     "bbs_synchronized.upload.failed": "Upload failed: %s",
 
     "bbs_synchronized.ui.section": "Server Sync",
-    "bbs_synchronized.ui.reload": "Reload",
+    "bbs_synchronized.ui.download": "Download",
     "bbs_synchronized.ui.upload": "Upload"
 }

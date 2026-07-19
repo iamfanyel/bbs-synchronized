@@ -564,7 +564,7 @@ public class ServerModelSync
                     .append(Text.translatable("bbs_synchronized.broadcast.uploaded",
                         player.getGameProfile().getName(),
                         uploaded,
-                        Text.literal("/bbs model reload").formatted(Formatting.WHITE)
+                        Text.literal("/bbs model download").formatted(Formatting.WHITE)
                     ).formatted(Formatting.GRAY));
 
                 for (ServerPlayerEntity other : server.getPlayerManager().getPlayerList())

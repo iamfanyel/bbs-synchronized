@@ -24,7 +24,7 @@ public class SyncCommands
         LiteralArgumentBuilder<ServerCommandSource> bbs = CommandManager.literal("bbs").requires((source) -> true);
 
         bbs.then(CommandManager.literal("model")
-            .then(CommandManager.literal("reload").executes(SyncCommands::reload))
+            .then(CommandManager.literal("download").executes(SyncCommands::download))
             .then(CommandManager.literal("upload").executes(SyncCommands::upload))
         );
 
@@ -52,7 +52,7 @@ public class SyncCommands
         return player;
     }
 
-    private static int reload(CommandContext<ServerCommandSource> ctx)
+    private static int download(CommandContext<ServerCommandSource> ctx)
     {
         ServerPlayerEntity player = requireSyncedPlayer(ctx);
 

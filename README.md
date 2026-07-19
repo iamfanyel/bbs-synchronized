@@ -8,10 +8,10 @@ and every player on it.
 - **Automatic distribution on join** — when a player joins, the server sends a manifest of all its
   model files. The client compares sizes and SHA-1 hashes against its local files and downloads
   only what's missing or different, then hot-reloads models and textures. No packs, no restarts.
-- **`/bbs model reload`** — if new models were added after players joined (dropped into the server
+- **`/bbs model download`** — if new models were added after players joined (dropped into the server
   folder or uploaded by another player), anyone can pull them in with this command.
 - **`/bbs model upload`** — players can push their *new* models (ones the server doesn't have yet)
-  to the server. Everyone is then told they can run `/bbs model reload` to receive them. Files
+  to the server. Everyone is then told they can run `/bbs model download` to receive them. Files
   that already exist on the server are never overwritten by uploads.
 - **Asynchronous transfers** — hashing, disk IO and streaming all run off the game threads through
   a fully asynchronous pipeline. Uploads and downloads are tracked per file with size + SHA-1
@@ -52,7 +52,7 @@ there is distributed automatically.
 
 | Command | Who    | What |
 | --- |--------| --- |
-| `/bbs model reload` | Anyone | Fetch models added since you joined |
+| `/bbs model download` | Anyone | Fetch models added since you joined |
 | `/bbs model upload` | Anyone | Upload your new models to the server (never overwrites existing ones) |
 
 The same actions are also available as buttons in BBS's utility overlay (default keybind **F6**),
