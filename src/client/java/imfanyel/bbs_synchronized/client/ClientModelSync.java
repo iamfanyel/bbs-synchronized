@@ -194,12 +194,13 @@ public class ClientModelSync
         {
             /* Delayed hello: wait for the server to announce its channels,
              * retrying every second until it does (or clearly never will).
-             * Skipped when we ARE the (integrated) server — same files. */
+             * The integrated-server host syncs too — the sync store is
+             * separate from client assets, so hosts download like everyone */
             if (client.player != null && !sentHello)
             {
                 joinTicks++;
 
-                if (client.isIntegratedServerRunning() || joinTicks > HELLO_GIVE_UP_TICKS)
+                if (joinTicks > HELLO_GIVE_UP_TICKS)
                 {
                     sentHello = true;
                 }
