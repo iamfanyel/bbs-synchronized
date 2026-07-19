@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
  *
  * <ul>
  *     <li>All server models are distributed automatically upon join.</li>
- *     <li>{@code /bbs model reload} re-synchronizes models added after joining.</li>
+ *     <li>{@code /bbs model download} re-synchronizes models added after joining.</li>
  *     <li>{@code /bbs model upload} lets players upload their new models.</li>
  * </ul>
  *
