@@ -24,6 +24,7 @@ import net.minecraft.util.Formatting;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -78,9 +79,15 @@ public class ServerModelSync
     private static int sweepCounter;
     private static int pruneCounter;
 
+    /**
+     * The server-side store of distributed models. It's deliberately separate
+     * from the BBS assets folder so that the host of an integrated server
+     * doesn't share storage with the server — uploads land here, and the host
+     * downloads them into their own assets like every other player.
+     */
     public static File getModelsFolder()
     {
-        File folder = BBSMod.getAssetsPath("models");
+        File folder = BBSMod.getGamePath("config/bbs/sync_models");
 
         folder.mkdirs();
 
@@ -110,7 +117,19 @@ public class ServerModelSync
             workers = SyncExecutors.workers("BBS-Sync-Worker");
             io = SyncExecutors.orderedIo("BBS-Sync-IO");
 
-            getModelsFolder();
+            File store = getModelsFolder();
+
+            /* One-time migration for dedicated servers that served models
+             * straight from the BBS assets folder before the store existed */
+            if (server.isDedicated() && isEmpty(store))
+            {
+                File legacy = BBSMod.getAssetsPath("models");
+
+                if (legacy.isDirectory())
+                {
+                    submit(workers, () -> migrateLegacyModels(legacy, store));
+                }
+            }
         });
 
         ServerLifecycleEvents.SERVER_STOPPED.register((server) ->
@@ -184,6 +203,49 @@ public class ServerModelSync
                 submit(workers, hashes::prune);
             }
         });
+    }
+
+    private static boolean isEmpty(File folder)
+    {
+        String[] entries = folder.list();
+
+        return entries == null || entries.length == 0;
+    }
+
+    /**
+     * Copy syncable files from the legacy location ({@code config/bbs/assets/
+     * models}) into the sync store. Non-destructive: the originals stay put.
+     */
+    private static void migrateLegacyModels(File legacy, File store)
+    {
+        int copied = 0;
+
+        for (ManifestEntry entry : new HashCache().buildManifest(legacy))
+        {
+            File source = SyncPaths.resolve(legacy, entry.path);
+            File target = SyncPaths.resolve(store, entry.path);
+
+            if (source == null || target == null || target.exists())
+            {
+                continue;
+            }
+
+            try
+            {
+                target.getParentFile().mkdirs();
+                Files.copy(source.toPath(), target.toPath());
+                copied += 1;
+            }
+            catch (Exception e)
+            {
+                BBSSynchronized.LOGGER.error("Couldn't migrate \"{}\" into the sync store", entry.path, e);
+            }
+        }
+
+        if (copied > 0)
+        {
+            BBSSynchronized.LOGGER.info("Migrated {} model file(s) from config/bbs/assets/models into config/bbs/sync_models — the sync store is the distribution folder from now on", copied);
+        }
     }
 
     /** Submit a task, silently dropping it when the server is shutting down */

@@ -1,7 +1,6 @@
 # BBS Synchronized
 
-A BBS (FS) addon that keeps custom models (`config/bbs/assets/models`) synchronized between a server
-and every player on it.
+A BBS (FS) addon that keeps custom models synchronized between a server and every player on it.
 
 ## Features
 
@@ -47,8 +46,12 @@ The addon is written to be Connector-clean so you can use this addon alongside S
 ## Installing
 
 Put the jar (plus BBS and Fabric API) into the `mods` folder of **both** the server and every
-client. Server models live in the server's `config/bbs/assets/models` folder — anything you drop
-there is distributed automatically.
+client. Distributed models live in the server's `config/bbs/sync_models` folder (its own store,
+separate from any player's BBS assets) — anything you drop there is distributed automatically.
+On dedicated servers, files from the old `config/bbs/assets/models` location are copied into the
+store once, automatically. Because the store is separate, the **host** of the server syncs
+exactly like every other player: uploads land in the store, and the host receives them with
+`/bbs model download` too.
 
 | Command | Who    | What |
 | --- |--------| --- |
