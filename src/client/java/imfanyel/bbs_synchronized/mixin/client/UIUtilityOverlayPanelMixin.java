@@ -30,10 +30,10 @@ public abstract class UIUtilityOverlayPanelMixin
         /* Labels come from the standard lang files (assets/bbs_synchronized/
          * lang/*.json); the panel is rebuilt every time it opens, so language
          * switches are picked up naturally */
-        UIButton reload = new UIButton(IKey.raw(I18n.translate("bbs_synchronized.ui.reload")), (b) ->
+        UIButton reload = new UIButton(IKey.raw(I18n.translate("bbs_synchronized.ui.download")), (b) ->
         {
             self.close();
-            bbsSynchronized$sendCommand("bbs model reload");
+            bbsSynchronized$sendCommand("bbs model download");
         });
         UIButton upload = new UIButton(IKey.raw(I18n.translate("bbs_synchronized.ui.upload")), (b) ->
         {
