@@ -1,14 +1,13 @@
 package imfanyel.bbs_synchronized.mixin.client;
 
+import imfanyel.bbs_synchronized.client.ClientModelSync;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.utility.UIUtilityOverlayPanel;
 import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.UIConstants;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.resource.language.I18n;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -29,16 +28,17 @@ public abstract class UIUtilityOverlayPanelMixin
 
         /* Labels come from the standard lang files (assets/bbs_synchronized/
          * lang/*.json); the panel is rebuilt every time it opens, so language
-         * switches are picked up naturally */
+         * switches are picked up naturally. The buttons bypass the chat
+         * command — feedback arrives as dashboard notifications instead */
         UIButton reload = new UIButton(IKey.raw(I18n.translate("bbs_synchronized.ui.download")), (b) ->
         {
             self.close();
-            bbsSynchronized$sendCommand("bbs model download");
+            ClientModelSync.requestFullSync();
         });
         UIButton upload = new UIButton(IKey.raw(I18n.translate("bbs_synchronized.ui.upload")), (b) ->
         {
             self.close();
-            bbsSynchronized$sendCommand("bbs model upload");
+            ClientModelSync.requestUploadNew();
         });
 
         self.view.add(
@@ -47,14 +47,4 @@ public abstract class UIUtilityOverlayPanelMixin
         );
     }
 
-    @Unique
-    private static void bbsSynchronized$sendCommand(String command)
-    {
-        MinecraftClient client = MinecraftClient.getInstance();
-
-        if (client.player != null)
-        {
-            client.player.networkHandler.sendCommand(command);
-        }
-    }
 }

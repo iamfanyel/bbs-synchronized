@@ -48,6 +48,12 @@ public class SyncPackets
     /** Client announces itself and asks for the join manifest (empty body) */
     public static final int CH_HELLO = 8;
 
+    /** Client asks for a full (authoritative) sync — used by the F6 buttons */
+    public static final int CH_REQUEST_SYNC = 14;
+
+    /** Client asks to start a normal upload — used by the F6 buttons */
+    public static final int CH_REQUEST_UPLOAD = 15;
+
     /** Client requests files from the manifest: last flag, path slice */
     public static final int CH_REQUEST_FILES = 9;
 

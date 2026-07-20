@@ -11,22 +11,29 @@ import imfanyel.bbs_synchronized.sync.TransferSession;
 import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSResources;
+import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.resources.Link;
+import mchorse.bbs_mod.ui.dashboard.UIDashboard;
+import mchorse.bbs_mod.ui.framework.UIScreen;
+import mchorse.bbs_mod.utils.colors.Colors;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.resource.language.I18n;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -135,11 +142,11 @@ public class ClientModelSync
 
                     if (status == SyncPackets.ACK_SKIPPED)
                     {
-                        message(Formatting.YELLOW, "bbs_synchronized.upload.skipped", path);
+                        message(MsgType.WARN, "bbs_synchronized.upload.skipped", path);
                     }
                     else if (status == SyncPackets.ACK_FAILED)
                     {
-                        message(Formatting.RED, "bbs_synchronized.upload.rejected", path);
+                        message(MsgType.ERROR, "bbs_synchronized.upload.rejected", path);
                     }
                 }
                 default -> {}
@@ -187,7 +194,7 @@ public class ClientModelSync
                         return;
                     }
 
-                    message(Formatting.RED, "bbs_synchronized.sync.timeout");
+                    message(MsgType.ERROR, "bbs_synchronized.sync.timeout");
                     finishBatch();
                 });
             }
@@ -300,7 +307,7 @@ public class ClientModelSync
         {
             if (reason == SyncPackets.REASON_RELOAD)
             {
-                message(Formatting.YELLOW, "bbs_synchronized.sync.in_progress");
+                message(MsgType.WARN, "bbs_synchronized.sync.in_progress");
             }
 
             return;
@@ -343,7 +350,7 @@ public class ClientModelSync
 
             if (reason == SyncPackets.REASON_RELOAD)
             {
-                message(Formatting.GREEN, "bbs_synchronized.sync.up_to_date");
+                message(MsgType.SUCCESS, "bbs_synchronized.sync.up_to_date");
             }
 
             return;
@@ -361,7 +368,7 @@ public class ClientModelSync
          * same way the built-in CDN sync does */
         BBSResources.stopWatchdog();
 
-        message(Formatting.GRAY, "bbs_synchronized.sync.downloading", needed.size(), String.format("%.1f", totalBytes / (1024F * 1024F)));
+        message(MsgType.INFO, "bbs_synchronized.sync.downloading", countModels(needed), String.format("%.1f", totalBytes / (1024F * 1024F)));
 
         /* The request list can exceed the 32 KiB serverbound packet limit,
          * so it's sent as chunked slices */
@@ -448,12 +455,12 @@ public class ClientModelSync
 
             if (count % 25 == 0 && count < expectedCount)
             {
-                message(Formatting.GRAY, "bbs_synchronized.sync.progress", count, expectedCount);
+                message(MsgType.INFO, "bbs_synchronized.sync.progress", count, expectedCount);
             }
         }
         else
         {
-            message(Formatting.RED, "bbs_synchronized.sync.verify_failed", session.path);
+            message(MsgType.ERROR, "bbs_synchronized.sync.verify_failed", session.path);
         }
     }
 
@@ -506,7 +513,7 @@ public class ClientModelSync
             BBSModClient.getFormCategories().setup();
         });
 
-        message(Formatting.GREEN, "bbs_synchronized.sync.done", updated.size());
+        message(MsgType.SUCCESS, "bbs_synchronized.sync.done", countModels(updated));
     }
 
     /* Uploading */
@@ -515,7 +522,7 @@ public class ClientModelSync
     {
         if (!tryBegin(true))
         {
-            message(Formatting.YELLOW, "bbs_synchronized.sync.in_progress");
+            message(MsgType.WARN, "bbs_synchronized.sync.in_progress");
 
             return;
         }
@@ -547,7 +554,7 @@ public class ClientModelSync
 
             if (toSend.isEmpty())
             {
-                message(Formatting.GREEN, force
+                message(MsgType.SUCCESS, force
                     ? "bbs_synchronized.upload.nothing_forced"
                     : "bbs_synchronized.upload.nothing");
 
@@ -556,10 +563,10 @@ public class ClientModelSync
 
             long totalBytes = toSend.stream().mapToLong((e) -> e.size).sum();
 
-            message(Formatting.GRAY, "bbs_synchronized.upload.uploading", toSend.size(), String.format("%.1f", totalBytes / (1024F * 1024F)));
+            message(MsgType.INFO, "bbs_synchronized.upload.uploading", countModels(toSend.stream().map((e) -> e.path).toList()), String.format("%.1f", totalBytes / (1024F * 1024F)));
 
             int tid = 0;
-            int sent = 0;
+            List<String> sentPaths = new ArrayList<>();
 
             for (ManifestEntry entry : toSend)
             {
@@ -610,12 +617,12 @@ public class ClientModelSync
 
                 ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_END, (end) -> end.writeInt(fileTid)));
 
-                sent += 1;
+                sentPaths.add(entry.path);
             }
 
             ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_DONE, null));
 
-            message(Formatting.GREEN, "bbs_synchronized.upload.done", sent);
+            message(MsgType.SUCCESS, "bbs_synchronized.upload.done", countModels(sentPaths));
         }
         catch (InterruptedException e)
         {
@@ -624,7 +631,7 @@ public class ClientModelSync
         catch (Exception e)
         {
             BBSSynchronized.LOGGER.error("Upload failed", e);
-            message(Formatting.RED, "bbs_synchronized.upload.failed", e.getMessage());
+            message(MsgType.ERROR, "bbs_synchronized.upload.failed", e.getMessage());
         }
         finally
         {
@@ -634,18 +641,94 @@ public class ClientModelSync
 
     /* Helpers */
 
-    /** Send a prefixed, translated chat message ({@code lang/*.json} keys) */
-    private static void message(Formatting color, String key, Object... args)
+    /** Feedback kinds, colored with BBS's own palette */
+    private enum MsgType
+    {
+        INFO(0xdddddd), SUCCESS(Colors.GREEN), WARN(Colors.ORANGE), ERROR(Colors.RED);
+
+        public final int color;
+
+        MsgType(int color)
+        {
+            this.color = color;
+        }
+    }
+
+    /**
+     * Send feedback: a BBS dashboard notification (short text) when the
+     * dashboard is open, a BBS-styled chat message otherwise.
+     */
+    private static void message(MsgType type, String key, Object... args)
     {
         MinecraftClient client = MinecraftClient.getInstance();
 
         client.execute(() ->
         {
+            if (postNotification(type, key, args))
+            {
+                return;
+            }
+
             if (client.player != null)
             {
-                client.player.sendMessage(Text.translatable("bbs_synchronized.prefix").formatted(Formatting.AQUA)
-                    .append(Text.translatable(key, args).formatted(color)));
+                client.player.sendMessage(Text.translatable("bbs_synchronized.prefix").styled((style) -> style.withColor(Colors.BLUE))
+                    .append(Text.translatable(key, args).styled((style) -> style.withColor(type.color))));
             }
         });
+    }
+
+    /** Post to the BBS dashboard's notification area when it's on screen */
+    private static boolean postNotification(MsgType type, String key, Object[] args)
+    {
+        UIDashboard dashboard = BBSModClient.getDashboardIfCreated();
+
+        if (dashboard == null
+            || !(MinecraftClient.getInstance().currentScreen instanceof UIScreen screen)
+            || screen.getMenu() != dashboard)
+        {
+            return false;
+        }
+
+        /* Notifications have little space — prefer the short string variant */
+        String shortKey = key + ".short";
+        IKey text = IKey.raw(I18n.translate(I18n.hasTranslation(shortKey) ? shortKey : key, args));
+
+        switch (type)
+        {
+            case SUCCESS -> dashboard.context.notifySuccess(text);
+            case ERROR -> dashboard.context.notifyError(text);
+            case WARN -> dashboard.context.notify(text, Colors.ORANGE);
+            default -> dashboard.context.notifyInfo(text);
+        }
+
+        return true;
+    }
+
+    /** Distinct model folders among the given file paths */
+    private static int countModels(Collection<String> paths)
+    {
+        Set<String> models = new HashSet<>();
+
+        for (String path : paths)
+        {
+            int slash = path.indexOf('/');
+
+            models.add(slash > 0 ? path.substring(0, slash) : path);
+        }
+
+        return models.size();
+    }
+
+    /* Triggered by the F6 dashboard buttons — these bypass the chat command
+     * so that every bit of feedback can flow through the notifications */
+
+    public static void requestFullSync()
+    {
+        ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_REQUEST_SYNC, null));
+    }
+
+    public static void requestUploadNew()
+    {
+        ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_REQUEST_UPLOAD, null));
     }
 }
