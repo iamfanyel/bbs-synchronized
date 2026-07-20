@@ -640,6 +640,13 @@ public class ServerModelSync
                 for (ServerPlayerEntity other : server.getPlayerManager().getPlayerList())
                 {
                     other.sendMessage(announcement);
+
+                    /* Auto-push: everyone else receives the new models right
+                     * away through their normal additive sync */
+                    if (other != player && isClientSynchronized(other))
+                    {
+                        sendManifest(other, SyncPackets.REASON_JOIN);
+                    }
                 }
             });
         });

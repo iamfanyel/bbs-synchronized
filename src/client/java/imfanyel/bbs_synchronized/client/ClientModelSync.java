@@ -72,6 +72,13 @@ public class ClientModelSync
      *  server doesn't have the addon (in ticks) */
     private static final int HELLO_GIVE_UP_TICKS = 600;
 
+    /** Set on join for the integrated-server host: publish new models to the
+     *  sync store automatically once the join sync settles */
+    private static boolean pendingAutoUpload;
+
+    /** Suppresses the "nothing to upload" message for automatic uploads */
+    private static volatile boolean quietUpload;
+
     /* Accumulators for chunked list packets (handled on the network thread,
      * which is single-threaded per connection) */
     private static final List<ManifestEntry> manifestBuffer = new ArrayList<>();
@@ -157,6 +164,8 @@ public class ClientModelSync
         {
             sentHello = false;
             joinTicks = 0;
+            pendingAutoUpload = false;
+            quietUpload = false;
         });
 
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> reset());
@@ -181,6 +190,10 @@ public class ClientModelSync
 
                     BBSSynchronized.LOGGER.info("Requesting model manifest from the server");
                     ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_HELLO, null));
+
+                    /* The host seeds the sync store with their own new models
+                     * automatically, mirroring the automatic download */
+                    pendingAutoUpload = client.isIntegratedServerRunning();
                 }
             }
 
@@ -353,6 +366,8 @@ public class ClientModelSync
                 message(MsgType.SUCCESS, "bbs_synchronized.sync.up_to_date");
             }
 
+            maybeAutoUpload();
+
             return;
         }
 
@@ -493,6 +508,8 @@ public class ClientModelSync
 
         if (updated.isEmpty())
         {
+            maybeAutoUpload();
+
             return;
         }
 
@@ -514,12 +531,35 @@ public class ClientModelSync
         });
 
         message(MsgType.SUCCESS, "bbs_synchronized.sync.done", countModels(updated));
+        maybeAutoUpload();
     }
 
     /* Uploading */
 
+    /** After the join sync settles, the integrated-server host publishes any
+     *  models the store doesn't have yet — quietly when there's nothing new */
+    private static void maybeAutoUpload()
+    {
+        if (!pendingAutoUpload)
+        {
+            return;
+        }
+
+        pendingAutoUpload = false;
+
+        if (MinecraftClient.getInstance().isIntegratedServerRunning())
+        {
+            quietUpload = true;
+            requestUploadNew();
+        }
+    }
+
     private static void handleUploadRequest(boolean force, List<ManifestEntry> serverManifest)
     {
+        boolean quiet = quietUpload;
+
+        quietUpload = false;
+
         if (!tryBegin(true))
         {
             message(MsgType.WARN, "bbs_synchronized.sync.in_progress");
@@ -554,9 +594,12 @@ public class ClientModelSync
 
             if (toSend.isEmpty())
             {
-                message(MsgType.SUCCESS, force
-                    ? "bbs_synchronized.upload.nothing_forced"
-                    : "bbs_synchronized.upload.nothing");
+                if (!quiet)
+                {
+                    message(MsgType.SUCCESS, force
+                        ? "bbs_synchronized.upload.nothing_forced"
+                        : "bbs_synchronized.upload.nothing");
+                }
 
                 return;
             }
