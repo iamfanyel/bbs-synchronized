@@ -1,8 +1,8 @@
 package imfanyel.bbs_synchronized.client;
 
 import imfanyel.bbs_synchronized.BBSSynchronized;
-import imfanyel.bbs_synchronized.network.SyncPackets;
 import imfanyel.bbs_synchronized.network.ClientSyncNetwork;
+import imfanyel.bbs_synchronized.network.SyncPackets;
 import imfanyel.bbs_synchronized.sync.HashCache;
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
 import imfanyel.bbs_synchronized.sync.SyncExecutors;
