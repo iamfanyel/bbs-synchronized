@@ -1,18 +1,17 @@
 package imfanyel.bbs_synchronized.network;
 
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
-import io.netty.buffer.Unpooled;
 import net.minecraft.network.PacketByteBuf;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.ToIntFunction;
 
 /**
  * Channel constants and shared wire helpers of the BBS Synchronized protocol.
  *
- * <p>All logical channels travel through the single {@link SyncPayload};
+ * <p>All logical channels travel through a single transport channel (see
+ * {@code SyncNetwork});
  * file payloads are chunked so that every packet stays well below the 32767
  * byte limit of serverbound custom payloads (the tighter of the two
  * directions). Transfers are identified by an integer transfer id so multiple
@@ -99,32 +98,6 @@ public class SyncPackets
 
     /** Hard cap of files per manifest / request / upload batch */
     public static final int MAX_FILES = 8192;
-
-    /** Build a payload for the given channel; a null writer means an empty body */
-    public static SyncPayload make(int channel, Consumer<PacketByteBuf> writer)
-    {
-        if (writer == null)
-        {
-            return new SyncPayload(channel, new byte[0]);
-        }
-
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-
-        writer.accept(buf);
-
-        byte[] data = new byte[buf.readableBytes()];
-
-        buf.readBytes(data);
-        buf.release();
-
-        return new SyncPayload(channel, data);
-    }
-
-    /** View a payload body as a readable packet buffer */
-    public static PacketByteBuf wrap(byte[] data)
-    {
-        return new PacketByteBuf(Unpooled.wrappedBuffer(data));
-    }
 
     public static void writeManifest(PacketByteBuf buf, List<ManifestEntry> entries)
     {

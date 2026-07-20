@@ -2,7 +2,7 @@ package imfanyel.bbs_synchronized.server;
 
 import imfanyel.bbs_synchronized.BBSSynchronized;
 import imfanyel.bbs_synchronized.network.SyncPackets;
-import imfanyel.bbs_synchronized.network.SyncPayload;
+import imfanyel.bbs_synchronized.network.SyncNetwork;
 import imfanyel.bbs_synchronized.sync.HashCache;
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
 import imfanyel.bbs_synchronized.sync.SyncExecutors;
@@ -12,7 +12,6 @@ import mchorse.bbs_mod.BBSMod;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -102,13 +101,9 @@ public class ServerModelSync
 
     public static void init()
     {
-        ServerPlayNetworking.registerGlobalReceiver(SyncPayload.ID, (payload, context) ->
+        SyncNetwork.init((server, player, channel, buf) ->
         {
-            MinecraftServer server = context.server();
-            ServerPlayerEntity player = context.player();
-            PacketByteBuf buf = SyncPackets.wrap(payload.data());
-
-            switch (payload.channel())
+            switch (channel)
             {
                 case SyncPackets.CH_HELLO -> sendManifest(player, SyncPackets.REASON_JOIN);
                 case SyncPackets.CH_REQUEST_SYNC -> sendManifest(player, SyncPackets.REASON_RELOAD);
@@ -276,7 +271,7 @@ public class ServerModelSync
 
     public static boolean isClientSynchronized(ServerPlayerEntity player)
     {
-        return ServerPlayNetworking.canSend(player, SyncPayload.ID);
+        return SyncNetwork.canSend(player);
     }
 
     /* Manifest distribution */
@@ -298,12 +293,12 @@ public class ServerModelSync
                 synchronized (sendLock)
                 {
                     SyncPackets.chunkManifest(manifest, SyncPackets.SAFE_S2C_BYTES, (slice, last) ->
-                        ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_MANIFEST, (buf) ->
+                        SyncNetwork.send(player, SyncPackets.CH_MANIFEST, (buf) ->
                         {
                             buf.writeByte(reason);
                             buf.writeBoolean(last);
                             SyncPackets.writeManifest(buf, slice);
-                        })));
+                        }));
                 }
             }
             catch (Exception e)
@@ -329,12 +324,12 @@ public class ServerModelSync
                 synchronized (sendLock)
                 {
                     SyncPackets.chunkManifest(manifest, SyncPackets.SAFE_S2C_BYTES, (slice, last) ->
-                        ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_UPLOAD_GO, (buf) ->
+                        SyncNetwork.send(player, SyncPackets.CH_UPLOAD_GO, (buf) ->
                         {
                             buf.writeBoolean(force);
                             buf.writeBoolean(last);
                             SyncPackets.writeManifest(buf, slice);
-                        })));
+                        }));
                 }
             }
             catch (Exception e)
@@ -413,13 +408,13 @@ public class ServerModelSync
 
                 final int fileTid = tid;
 
-                ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_FILE_BEGIN, (begin) ->
+                SyncNetwork.send(player, SyncPackets.CH_FILE_BEGIN, (begin) ->
                 {
                     begin.writeInt(fileTid);
                     begin.writeString(path);
                     begin.writeLong(file.length());
                     begin.writeString(sha1);
-                }));
+                });
 
                 try (InputStream in = new FileInputStream(file))
                 {
@@ -436,12 +431,12 @@ public class ServerModelSync
 
                         final int chunkLength = read;
 
-                        ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_FILE_DATA, (chunk) ->
+                        SyncNetwork.send(player, SyncPackets.CH_FILE_DATA, (chunk) ->
                         {
                             chunk.writeInt(fileTid);
                             chunk.writeVarInt(chunkLength);
                             chunk.writeBytes(buffer, 0, chunkLength);
-                        }));
+                        });
 
                         /* Gentle pacing: ~1.7 MB bursts, then breathe, so big
                          * transfers never starve the connection */
@@ -452,7 +447,7 @@ public class ServerModelSync
                     }
                 }
 
-                ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_FILE_END, (end) -> end.writeInt(fileTid)));
+                SyncNetwork.send(player, SyncPackets.CH_FILE_END, (end) -> end.writeInt(fileTid));
 
                 sent += 1;
             }
@@ -472,7 +467,7 @@ public class ServerModelSync
             streaming.remove(player.getUuid());
         }
 
-        ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_BATCH_DONE, null));
+        SyncNetwork.send(player, SyncPackets.CH_BATCH_DONE, null);
 
         if (sent > 0)
         {
@@ -659,11 +654,11 @@ public class ServerModelSync
             return;
         }
 
-        ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_UPLOAD_ACK, (buf) ->
+        SyncNetwork.send(player, SyncPackets.CH_UPLOAD_ACK, (buf) ->
         {
             buf.writeInt(tid);
             buf.writeByte(status);
             buf.writeString(path);
-        }));
+        });
     }
 }

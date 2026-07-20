@@ -1,10 +1,8 @@
 package imfanyel.bbs_synchronized;
 
-import imfanyel.bbs_synchronized.network.SyncPayload;
 import imfanyel.bbs_synchronized.server.ServerModelSync;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,10 +25,6 @@ public class BBSSynchronized implements ModInitializer
     @Override
     public void onInitialize()
     {
-        /* The whole sync protocol travels through one multiplexed payload */
-        PayloadTypeRegistry.playC2S().register(SyncPayload.ID, SyncPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SyncPayload.ID, SyncPayload.CODEC);
-
         ServerModelSync.init();
 
         CommandRegistrationCallback.EVENT.register(SyncCommands::register);

@@ -2,7 +2,7 @@ package imfanyel.bbs_synchronized.client;
 
 import imfanyel.bbs_synchronized.BBSSynchronized;
 import imfanyel.bbs_synchronized.network.SyncPackets;
-import imfanyel.bbs_synchronized.network.SyncPayload;
+import imfanyel.bbs_synchronized.network.ClientSyncNetwork;
 import imfanyel.bbs_synchronized.sync.HashCache;
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
 import imfanyel.bbs_synchronized.sync.SyncExecutors;
@@ -18,7 +18,6 @@ import mchorse.bbs_mod.ui.framework.UIScreen;
 import mchorse.bbs_mod.utils.colors.Colors;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.resource.language.I18n;
 import net.minecraft.network.PacketByteBuf;
@@ -109,11 +108,9 @@ public class ClientModelSync
         workers = SyncExecutors.workers("BBS-Sync-Client-Worker");
         io = SyncExecutors.orderedIo("BBS-Sync-Client-IO");
 
-        ClientPlayNetworking.registerGlobalReceiver(SyncPayload.ID, (payload, context) ->
+        ClientSyncNetwork.init((channel, buf) ->
         {
-            PacketByteBuf buf = SyncPackets.wrap(payload.data());
-
-            switch (payload.channel())
+            switch (channel)
             {
                 case SyncPackets.CH_MANIFEST -> receiveManifestSlice(buf);
                 case SyncPackets.CH_FILE_BEGIN ->
@@ -184,12 +181,12 @@ public class ClientModelSync
                 {
                     sentHello = true;
                 }
-                else if (joinTicks >= 40 && joinTicks % 20 == 0 && ClientPlayNetworking.canSend(SyncPayload.ID))
+                else if (joinTicks >= 40 && joinTicks % 20 == 0 && ClientSyncNetwork.canSend())
                 {
                     sentHello = true;
 
                     BBSSynchronized.LOGGER.info("Requesting model manifest from the server");
-                    ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_HELLO, null));
+                    ClientSyncNetwork.send(SyncPackets.CH_HELLO, null);
 
                     /* The host seeds the sync store with their own new models
                      * automatically, mirroring the automatic download */
@@ -214,8 +211,8 @@ public class ClientModelSync
         });
     }
 
-    /* Payload handlers run on the render thread, so the slice accumulators
-     * below are only ever touched from one thread. */
+    /* Transport handlers run on a single thread, so the slice accumulators
+     * below are never touched concurrently. */
 
     private static void receiveManifestSlice(PacketByteBuf buf)
     {
@@ -388,7 +385,7 @@ public class ClientModelSync
         /* The request list can exceed the 32 KiB serverbound packet limit,
          * so it's sent as chunked slices */
         SyncPackets.chunkPaths(needed, SyncPackets.SAFE_C2S_BYTES, (slice, last) ->
-            ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_REQUEST_FILES, (buf) ->
+            ClientSyncNetwork.send(SyncPackets.CH_REQUEST_FILES, (buf) ->
             {
                 buf.writeBoolean(last);
                 buf.writeInt(slice.size());
@@ -397,7 +394,7 @@ public class ClientModelSync
                 {
                     buf.writeString(path);
                 }
-            })));
+            }));
     }
 
     private static void beginDownload(int tid, String path, long size, String sha1)
@@ -624,14 +621,14 @@ public class ClientModelSync
 
                 final int fileTid = tid;
 
-                ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_BEGIN, (begin) ->
+                ClientSyncNetwork.send(SyncPackets.CH_UP_BEGIN, (begin) ->
                 {
                     begin.writeInt(fileTid);
                     begin.writeString(entry.path);
                     begin.writeLong(file.length());
                     begin.writeString(entry.sha1);
                     begin.writeBoolean(force);
-                }));
+                });
 
                 try (InputStream in = new FileInputStream(file))
                 {
@@ -643,12 +640,12 @@ public class ClientModelSync
                     {
                         final int chunkLength = read;
 
-                        ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_DATA, (chunk) ->
+                        ClientSyncNetwork.send(SyncPackets.CH_UP_DATA, (chunk) ->
                         {
                             chunk.writeInt(fileTid);
                             chunk.writeVarInt(chunkLength);
                             chunk.writeBytes(buffer, 0, chunkLength);
-                        }));
+                        });
 
                         /* Pace big uploads so the connection stays responsive */
                         if (++chunks % 32 == 0)
@@ -658,12 +655,12 @@ public class ClientModelSync
                     }
                 }
 
-                ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_END, (end) -> end.writeInt(fileTid)));
+                ClientSyncNetwork.send(SyncPackets.CH_UP_END, (end) -> end.writeInt(fileTid));
 
                 sentPaths.add(entry.path);
             }
 
-            ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_UP_DONE, null));
+            ClientSyncNetwork.send(SyncPackets.CH_UP_DONE, null);
 
             message(MsgType.SUCCESS, "bbs_synchronized.upload.done", countModels(sentPaths));
         }
@@ -767,11 +764,11 @@ public class ClientModelSync
 
     public static void requestFullSync()
     {
-        ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_REQUEST_SYNC, null));
+        ClientSyncNetwork.send(SyncPackets.CH_REQUEST_SYNC, null);
     }
 
     public static void requestUploadNew()
     {
-        ClientPlayNetworking.send(SyncPackets.make(SyncPackets.CH_REQUEST_UPLOAD, null));
+        ClientSyncNetwork.send(SyncPackets.CH_REQUEST_UPLOAD, null);
     }
 }
