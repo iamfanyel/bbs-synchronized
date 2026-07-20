@@ -37,7 +37,7 @@ public class SyncPackets
     /** All requested files were streamed (empty body) */
     public static final int CH_BATCH_DONE = 5;
 
-    /** Server asks the client to start an upload: last flag, manifest slice */
+    /** Server asks the client to start an upload: force flag, last flag, manifest slice */
     public static final int CH_UPLOAD_GO = 6;
 
     /** Per-file upload result: tid, status byte, path */
@@ -51,7 +51,7 @@ public class SyncPackets
     /** Client requests files from the manifest: last flag, path slice */
     public static final int CH_REQUEST_FILES = 9;
 
-    /** File upload stream: begin (tid, path, size, sha1) */
+    /** File upload stream: begin (tid, path, size, sha1, force) */
     public static final int CH_UP_BEGIN = 10;
 
     /** File upload stream: data (tid, bytes) */

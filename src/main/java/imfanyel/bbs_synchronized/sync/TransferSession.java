@@ -24,6 +24,9 @@ public class TransferSession
     /** Last time a chunk arrived, used to sweep stale transfers */
     public volatile long lastActivity;
 
+    /** Server-side: whether this upload may overwrite an existing store file */
+    public boolean force;
+
     private final File tmp;
     private final OutputStream out;
     private long written;

@@ -317,7 +317,7 @@ public class ServerModelSync
      * to {@code /bbs model upload}. The client diffs its local models against
      * it and streams back what the server is missing.
      */
-    public static void requestUpload(ServerPlayerEntity player)
+    public static void requestUpload(ServerPlayerEntity player, boolean force)
     {
         submit(workers, () ->
         {
@@ -330,6 +330,7 @@ public class ServerModelSync
                     SyncPackets.chunkManifest(manifest, SyncPackets.SAFE_S2C_BYTES, (slice, last) ->
                         ServerPlayNetworking.send(player, SyncPackets.make(SyncPackets.CH_UPLOAD_GO, (buf) ->
                         {
+                            buf.writeBoolean(force);
                             buf.writeBoolean(last);
                             SyncPackets.writeManifest(buf, slice);
                         })));
@@ -486,6 +487,7 @@ public class ServerModelSync
         String path = buf.readString();
         long size = buf.readLong();
         String sha1 = buf.readString();
+        boolean force = buf.readBoolean();
 
         submit(io, () ->
         {
@@ -503,8 +505,10 @@ public class ServerModelSync
             try
             {
                 File tmp = new File(getUploadTmpFolder(), player.getUuid() + "-" + tid + ".tmp");
+                TransferSession session = new TransferSession(path, size, sha1, tmp);
 
-                sessions.put(tid, new TransferSession(path, size, sha1, tmp));
+                session.force = force;
+                sessions.put(tid, session);
             }
             catch (Exception e)
             {
@@ -565,9 +569,9 @@ public class ServerModelSync
     }
 
     /**
-     * Verify a completed upload and move it into the models folder. Server
-     * files are never overwritten by uploads: an already existing identical
-     * file is fine, a different one is skipped.
+     * Verify a completed upload and move it into the sync store. Existing
+     * store files are only replaced when the upload was forced
+     * ({@code /bbs model upload --force}).
      */
     private static byte finishUpload(TransferSession session)
     {
@@ -585,12 +589,14 @@ public class ServerModelSync
             return SyncPackets.ACK_FAILED;
         }
 
-        if (target.exists())
+        if (target.exists() && !session.force)
         {
             String existing = hashes.hash(target);
 
             session.discard();
 
+            /* Store files are only overwritten by forced uploads: an
+             * identical file is fine, a different one is skipped */
             return session.sha1.equals(existing) ? SyncPackets.ACK_OK : SyncPackets.ACK_SKIPPED;
         }
 

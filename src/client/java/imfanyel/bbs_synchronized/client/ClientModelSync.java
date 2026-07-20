@@ -24,10 +24,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -222,6 +221,7 @@ public class ClientModelSync
 
     private static void receiveUploadGoSlice(PacketByteBuf buf)
     {
+        boolean force = buf.readBoolean();
         boolean last = buf.readBoolean();
 
         if (uploadGoBuffer.size() < SyncPackets.MAX_FILES)
@@ -237,7 +237,7 @@ public class ClientModelSync
         List<ManifestEntry> manifest = new ArrayList<>(uploadGoBuffer);
 
         uploadGoBuffer.clear();
-        workers.submit(() -> handleUploadRequest(manifest));
+        workers.submit(() -> handleUploadRequest(force, manifest));
     }
 
     private static void reset()
@@ -306,6 +306,11 @@ public class ClientModelSync
             return;
         }
 
+        /* The automatic join sync is additive only — it never rewrites a
+         * local file that differs from the server's copy. Only the explicit
+         * /bbs model download command does a full, server-authoritative sync */
+        boolean full = reason == SyncPackets.REASON_RELOAD;
+
         File root = getModelsFolder();
         List<String> needed = new ArrayList<>();
         long totalBytes = 0;
@@ -323,7 +328,9 @@ public class ClientModelSync
                 continue;
             }
 
-            if (!local.isFile() || local.length() != entry.size || !entry.sha1.equals(hashes.hash(local)))
+            boolean missing = !local.isFile();
+
+            if (missing || (full && (local.length() != entry.size || !entry.sha1.equals(hashes.hash(local)))))
             {
                 needed.add(entry.path);
                 totalBytes += entry.size;
@@ -504,7 +511,7 @@ public class ClientModelSync
 
     /* Uploading */
 
-    private static void handleUploadRequest(List<ManifestEntry> serverManifest)
+    private static void handleUploadRequest(boolean force, List<ManifestEntry> serverManifest)
     {
         if (!tryBegin(true))
         {
@@ -517,18 +524,22 @@ public class ClientModelSync
         {
             File root = getModelsFolder();
             List<ManifestEntry> local = hashes.buildManifest(root);
-            Set<String> remotePaths = new HashSet<>();
+            Map<String, String> remoteHashes = new HashMap<>();
 
             for (ManifestEntry entry : serverManifest)
             {
-                remotePaths.add(entry.path);
+                remoteHashes.put(entry.path, entry.sha1);
             }
 
             List<ManifestEntry> toSend = new ArrayList<>();
 
             for (ManifestEntry entry : local)
             {
-                if (!remotePaths.contains(entry.path))
+                String remoteSha1 = remoteHashes.get(entry.path);
+
+                /* Normal uploads send only files the server lacks; forced
+                 * uploads also resend files whose contents differ */
+                if (remoteSha1 == null || (force && !remoteSha1.equals(entry.sha1)))
                 {
                     toSend.add(entry);
                 }
@@ -536,7 +547,9 @@ public class ClientModelSync
 
             if (toSend.isEmpty())
             {
-                message(Formatting.GREEN, "bbs_synchronized.upload.nothing");
+                message(Formatting.GREEN, force
+                    ? "bbs_synchronized.upload.nothing_forced"
+                    : "bbs_synchronized.upload.nothing");
 
                 return;
             }
@@ -567,6 +580,7 @@ public class ClientModelSync
                     begin.writeString(entry.path);
                     begin.writeLong(file.length());
                     begin.writeString(entry.sha1);
+                    begin.writeBoolean(force);
                 }));
 
                 try (InputStream in = new FileInputStream(file))
