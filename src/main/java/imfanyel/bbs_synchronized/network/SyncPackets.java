@@ -36,7 +36,7 @@ public class SyncPackets
     /** All requested files were streamed (empty payload) */
     public static final Identifier BATCH_DONE = new Identifier(BBSSynchronized.MOD_ID, "batch_done");
 
-    /** Server asks the client to start an upload: last flag, manifest slice */
+    /** Server asks the client to start an upload: force flag, last flag, manifest slice */
     public static final Identifier UPLOAD_GO = new Identifier(BBSSynchronized.MOD_ID, "upload_go");
 
     /** Per-file upload result: tid, status byte, path */
@@ -50,7 +50,7 @@ public class SyncPackets
     /** Client requests files from the manifest: last flag, path slice */
     public static final Identifier REQUEST_FILES = new Identifier(BBSSynchronized.MOD_ID, "request_files");
 
-    /** File upload stream: begin (tid, path, size, sha1) */
+    /** File upload stream: begin (tid, path, size, sha1, force) */
     public static final Identifier UP_BEGIN = new Identifier(BBSSynchronized.MOD_ID, "up_begin");
 
     /** File upload stream: data (tid, bytes) */

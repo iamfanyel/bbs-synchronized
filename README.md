@@ -6,21 +6,23 @@ A BBS (FS) addon that keeps custom models synchronized between a server and ever
 
 - **Automatic distribution on join** — when a player joins, the server sends a manifest of all its
   model files. The client compares sizes and SHA-1 hashes against its local files and downloads
-  only what's missing or different, then hot-reloads models and textures. No packs, no restarts.
-- **`/bbs model download`** — if new models were added after players joined (dropped into the server
-  folder or uploaded by another player), anyone can pull them in with this command.
+  **only files it's missing** — a local model that differs from the server's copy is never
+  rewritten automatically. Then it hot-reloads models and textures. No packs, no restarts.
+- **`/bbs model download`** — full, server-authoritative sync on demand: fetches new models *and*
+  updates local files whose contents differ from the server's copies.
 - **`/bbs model upload`** — players can push their *new* models (ones the server doesn't have yet)
-  to the server. Everyone is then told they can run `/bbs model download` to receive them. Files
-  that already exist on the server are never overwritten by uploads.
+  to the server. Everyone is then told they can run `/bbs model download` to receive them.
+- **`/bbs model upload --force`** — also resends files that already exist in the server store with
+  different contents, overwriting the store's copies (for updating models you've changed).
 - **Asynchronous transfers** — hashing, disk IO and streaming all run off the game threads through
   a fully asynchronous pipeline. Uploads and downloads are tracked per file with size + SHA-1
   verification, written to temp files and moved into place atomically, and recover gracefully:
   stalled or abandoned transfers time out and are cleaned up, even with large files.
 
 
-> **Note:** the server is authoritative when downloading — if you have a local model with the same
-> path as a server model but different contents, the server version will overwrite yours on
-> join/reload.
+> **Note:** the automatic join sync is additive only — your local files are never rewritten when
+> joining. Running `/bbs model download` explicitly is what updates local files that differ from
+> the server's copies.
 
 
 ## Building
@@ -57,6 +59,7 @@ exactly like every other player: uploads land in the store, and the host receive
 | --- |--------| --- |
 | `/bbs model download` | Anyone | Fetch models added since you joined |
 | `/bbs model upload` | Anyone | Upload your new models to the server (never overwrites existing ones) |
+| `/bbs model upload --force` | Anyone | Also overwrite server copies of models you've changed |
 
 The same actions are also available as buttons in BBS's utility overlay (default keybind **F6**),
 under the "Server Sync" section — they run the exact same commands.
