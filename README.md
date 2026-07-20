@@ -11,7 +11,9 @@ A BBS (FS) addon that keeps custom models synchronized between a server and ever
 - **`/bbs model download`** — full, server-authoritative sync on demand: fetches new models *and*
   updates local files whose contents differ from the server's copies.
 - **`/bbs model upload`** — players can push their *new* models (ones the server doesn't have yet)
-  to the server. Everyone is then told they can run `/bbs model download` to receive them.
+  to the server. Everyone online then receives them automatically (additive push — nobody's
+  differing local files are touched). The host of an integrated server also publishes their new
+  models automatically when joining, mirroring the automatic download.
 - **`/bbs model upload --force`** — also resends files that already exist in the server store with
   different contents, overwriting the store's copies (for updating models you've changed).
 - **Asynchronous transfers** — hashing, disk IO and streaming all run off the game threads through
