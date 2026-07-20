@@ -2,6 +2,7 @@ package imfanyel.bbs_synchronized.server;
 
 import imfanyel.bbs_synchronized.BBSSynchronized;
 import imfanyel.bbs_synchronized.network.SyncPackets;
+import imfanyel.bbs_synchronized.network.SyncNetwork;
 import imfanyel.bbs_synchronized.sync.HashCache;
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
 import imfanyel.bbs_synchronized.sync.SyncExecutors;
@@ -10,13 +11,9 @@ import imfanyel.bbs_synchronized.sync.TransferSession;
 import mchorse.bbs_mod.BBSMod;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
-import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import mchorse.bbs_mod.utils.colors.Colors;
 import net.minecraft.text.Text;
@@ -104,14 +101,21 @@ public class ServerModelSync
 
     public static void init()
     {
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.HELLO, (server, player, handler, buf, responder) -> sendManifest(player, SyncPackets.REASON_JOIN));
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.REQUEST_SYNC, (server, player, handler, buf, responder) -> sendManifest(player, SyncPackets.REASON_RELOAD));
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.REQUEST_UPLOAD, (server, player, handler, buf, responder) -> requestUpload(player, false));
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.REQUEST_FILES, ServerModelSync::handleRequestFiles);
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.UP_BEGIN, ServerModelSync::handleUploadBegin);
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.UP_DATA, ServerModelSync::handleUploadData);
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.UP_END, ServerModelSync::handleUploadEnd);
-        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.UP_DONE, ServerModelSync::handleUploadDone);
+        SyncNetwork.init((server, player, channel, buf) ->
+        {
+            switch (channel)
+            {
+                case SyncPackets.CH_HELLO -> sendManifest(player, SyncPackets.REASON_JOIN);
+                case SyncPackets.CH_REQUEST_SYNC -> sendManifest(player, SyncPackets.REASON_RELOAD);
+                case SyncPackets.CH_REQUEST_UPLOAD -> requestUpload(player, false);
+                case SyncPackets.CH_REQUEST_FILES -> handleRequestFiles(server, player, buf);
+                case SyncPackets.CH_UP_BEGIN -> handleUploadBegin(player, buf);
+                case SyncPackets.CH_UP_DATA -> handleUploadData(player, buf);
+                case SyncPackets.CH_UP_END -> handleUploadEnd(player, buf);
+                case SyncPackets.CH_UP_DONE -> handleUploadDone(server, player);
+                default -> {}
+            }
+        });
 
         ServerLifecycleEvents.SERVER_STARTED.register((server) ->
         {
@@ -267,7 +271,7 @@ public class ServerModelSync
 
     public static boolean isClientSynchronized(ServerPlayerEntity player)
     {
-        return ServerPlayNetworking.canSend(player, SyncPackets.MANIFEST);
+        return SyncNetwork.canSend(player);
     }
 
     /* Manifest distribution */
@@ -289,15 +293,12 @@ public class ServerModelSync
                 synchronized (sendLock)
                 {
                     SyncPackets.chunkManifest(manifest, SyncPackets.SAFE_S2C_BYTES, (slice, last) ->
-                    {
-                        PacketByteBuf buf = PacketByteBufs.create();
-
-                        buf.writeByte(reason);
-                        buf.writeBoolean(last);
-                        SyncPackets.writeManifest(buf, slice);
-
-                        ServerPlayNetworking.send(player, SyncPackets.MANIFEST, buf);
-                    });
+                        SyncNetwork.send(player, SyncPackets.CH_MANIFEST, (buf) ->
+                        {
+                            buf.writeByte(reason);
+                            buf.writeBoolean(last);
+                            SyncPackets.writeManifest(buf, slice);
+                        }));
                 }
             }
             catch (Exception e)
@@ -323,15 +324,12 @@ public class ServerModelSync
                 synchronized (sendLock)
                 {
                     SyncPackets.chunkManifest(manifest, SyncPackets.SAFE_S2C_BYTES, (slice, last) ->
-                    {
-                        PacketByteBuf buf = PacketByteBufs.create();
-
-                        buf.writeBoolean(force);
-                        buf.writeBoolean(last);
-                        SyncPackets.writeManifest(buf, slice);
-
-                        ServerPlayNetworking.send(player, SyncPackets.UPLOAD_GO, buf);
-                    });
+                        SyncNetwork.send(player, SyncPackets.CH_UPLOAD_GO, (buf) ->
+                        {
+                            buf.writeBoolean(force);
+                            buf.writeBoolean(last);
+                            SyncPackets.writeManifest(buf, slice);
+                        }));
                 }
             }
             catch (Exception e)
@@ -343,12 +341,11 @@ public class ServerModelSync
 
     /* Download streaming (server -> client) */
 
-    private static void handleRequestFiles(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responder)
+    private static void handleRequestFiles(MinecraftServer server, ServerPlayerEntity player, PacketByteBuf buf)
     {
         /* Requests arrive as chunked slices (32 KiB serverbound packet limit);
-         * accumulate them until the slice flagged as last. Packets of one
-         * connection are handled on a single netty thread, so plain lists
-         * are safe here. */
+         * accumulate them until the slice flagged as last. Payload handlers
+         * run on the server thread, so plain lists are safe here. */
         boolean last = buf.readBoolean();
         int count = Math.min(buf.readInt(), SyncPackets.MAX_FILES);
         List<String> pending = pendingRequests.computeIfAbsent(player.getUuid(), (k) -> new ArrayList<>());
@@ -409,14 +406,15 @@ public class ServerModelSync
 
                 tid += 1;
 
-                PacketByteBuf begin = PacketByteBufs.create();
+                final int fileTid = tid;
 
-                begin.writeInt(tid);
-                begin.writeString(path);
-                begin.writeLong(file.length());
-                begin.writeString(sha1);
-
-                ServerPlayNetworking.send(player, SyncPackets.FILE_BEGIN, begin);
+                SyncNetwork.send(player, SyncPackets.CH_FILE_BEGIN, (begin) ->
+                {
+                    begin.writeInt(fileTid);
+                    begin.writeString(path);
+                    begin.writeLong(file.length());
+                    begin.writeString(sha1);
+                });
 
                 try (InputStream in = new FileInputStream(file))
                 {
@@ -431,16 +429,14 @@ public class ServerModelSync
                             return;
                         }
 
-                        PacketByteBuf chunk = PacketByteBufs.create();
+                        final int chunkLength = read;
 
-                        chunk.writeInt(tid);
-
-                        /* Same wire format as writeByteArray (varint length +
-                         * bytes), without copying the buffer into a new array */
-                        chunk.writeVarInt(read);
-                        chunk.writeBytes(buffer, 0, read);
-
-                        ServerPlayNetworking.send(player, SyncPackets.FILE_DATA, chunk);
+                        SyncNetwork.send(player, SyncPackets.CH_FILE_DATA, (chunk) ->
+                        {
+                            chunk.writeInt(fileTid);
+                            chunk.writeVarInt(chunkLength);
+                            chunk.writeBytes(buffer, 0, chunkLength);
+                        });
 
                         /* Gentle pacing: ~1.7 MB bursts, then breathe, so big
                          * transfers never starve the connection */
@@ -451,10 +447,7 @@ public class ServerModelSync
                     }
                 }
 
-                PacketByteBuf end = PacketByteBufs.create();
-
-                end.writeInt(tid);
-                ServerPlayNetworking.send(player, SyncPackets.FILE_END, end);
+                SyncNetwork.send(player, SyncPackets.CH_FILE_END, (end) -> end.writeInt(fileTid));
 
                 sent += 1;
             }
@@ -474,7 +467,7 @@ public class ServerModelSync
             streaming.remove(player.getUuid());
         }
 
-        ServerPlayNetworking.send(player, SyncPackets.BATCH_DONE, PacketByteBufs.empty());
+        SyncNetwork.send(player, SyncPackets.CH_BATCH_DONE, null);
 
         if (sent > 0)
         {
@@ -484,7 +477,7 @@ public class ServerModelSync
 
     /* Upload receiving (client -> server) */
 
-    private static void handleUploadBegin(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responder)
+    private static void handleUploadBegin(ServerPlayerEntity player, PacketByteBuf buf)
     {
         int tid = buf.readInt();
         String path = buf.readString();
@@ -521,7 +514,7 @@ public class ServerModelSync
         });
     }
 
-    private static void handleUploadData(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responder)
+    private static void handleUploadData(ServerPlayerEntity player, PacketByteBuf buf)
     {
         int tid = buf.readInt();
         byte[] data = buf.readByteArray();
@@ -545,7 +538,7 @@ public class ServerModelSync
         });
     }
 
-    private static void handleUploadEnd(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responder)
+    private static void handleUploadEnd(ServerPlayerEntity player, PacketByteBuf buf)
     {
         int tid = buf.readInt();
 
@@ -616,7 +609,7 @@ public class ServerModelSync
         return SyncPackets.ACK_WRITTEN;
     }
 
-    private static void handleUploadDone(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender responder)
+    private static void handleUploadDone(MinecraftServer server, ServerPlayerEntity player)
     {
         /* The batch may still be in the IO queue behind this packet, so
          * resolve the authoritative count on the IO thread */
@@ -661,12 +654,11 @@ public class ServerModelSync
             return;
         }
 
-        PacketByteBuf buf = PacketByteBufs.create();
-
-        buf.writeInt(tid);
-        buf.writeByte(status);
-        buf.writeString(path);
-
-        ServerPlayNetworking.send(player, SyncPackets.UPLOAD_ACK, buf);
+        SyncNetwork.send(player, SyncPackets.CH_UPLOAD_ACK, (buf) ->
+        {
+            buf.writeInt(tid);
+            buf.writeByte(status);
+            buf.writeString(path);
+        });
     }
 }
