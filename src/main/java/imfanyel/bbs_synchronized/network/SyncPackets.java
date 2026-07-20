@@ -47,6 +47,12 @@ public class SyncPackets
     /** Client announces itself and asks for the join manifest */
     public static final Identifier HELLO = new Identifier(BBSSynchronized.MOD_ID, "hello");
 
+    /** Client asks for a full (authoritative) sync — used by the F6 buttons */
+    public static final Identifier REQUEST_SYNC = new Identifier(BBSSynchronized.MOD_ID, "request_sync");
+
+    /** Client asks to start a normal upload — used by the F6 buttons */
+    public static final Identifier REQUEST_UPLOAD = new Identifier(BBSSynchronized.MOD_ID, "request_upload");
+
     /** Client requests files from the manifest: last flag, path slice */
     public static final Identifier REQUEST_FILES = new Identifier(BBSSynchronized.MOD_ID, "request_files");
 

@@ -18,8 +18,8 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
+import mchorse.bbs_mod.utils.colors.Colors;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -35,7 +35,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The server half of the synchronization pipeline.
@@ -59,8 +58,8 @@ public class ServerModelSync
     /** Active upload sessions, keyed by player UUID and transfer id */
     private static final Map<UUID, Map<Integer, TransferSession>> uploads = new ConcurrentHashMap<>();
 
-    /** Files actually written per player during the current upload batch */
-    private static final Map<UUID, AtomicInteger> uploadedCounts = new ConcurrentHashMap<>();
+    /** Distinct models actually written per player during the current upload batch */
+    private static final Map<UUID, Set<String>> uploadedModels = new ConcurrentHashMap<>();
 
     /** Players that currently have a download batch being streamed to them */
     private static final Set<UUID> streaming = ConcurrentHashMap.newKeySet();
@@ -106,6 +105,8 @@ public class ServerModelSync
     public static void init()
     {
         ServerPlayNetworking.registerGlobalReceiver(SyncPackets.HELLO, (server, player, handler, buf, responder) -> sendManifest(player, SyncPackets.REASON_JOIN));
+        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.REQUEST_SYNC, (server, player, handler, buf, responder) -> sendManifest(player, SyncPackets.REASON_RELOAD));
+        ServerPlayNetworking.registerGlobalReceiver(SyncPackets.REQUEST_UPLOAD, (server, player, handler, buf, responder) -> requestUpload(player, false));
         ServerPlayNetworking.registerGlobalReceiver(SyncPackets.REQUEST_FILES, ServerModelSync::handleRequestFiles);
         ServerPlayNetworking.registerGlobalReceiver(SyncPackets.UP_BEGIN, ServerModelSync::handleUploadBegin);
         ServerPlayNetworking.registerGlobalReceiver(SyncPackets.UP_DATA, ServerModelSync::handleUploadData);
@@ -146,7 +147,7 @@ public class ServerModelSync
             }
 
             uploads.clear();
-            uploadedCounts.clear();
+            uploadedModels.clear();
             pendingRequests.clear();
             streaming.clear();
         });
@@ -161,7 +162,7 @@ public class ServerModelSync
                 submit(io, () -> sessions.values().forEach(TransferSession::abort));
             }
 
-            uploadedCounts.remove(uuid);
+            uploadedModels.remove(uuid);
             pendingRequests.remove(uuid);
             streaming.remove(uuid);
         });
@@ -564,7 +565,10 @@ public class ServerModelSync
 
             if (status == SyncPackets.ACK_WRITTEN)
             {
-                uploadedCounts.computeIfAbsent(player.getUuid(), (k) -> new AtomicInteger()).incrementAndGet();
+                int slash = session.path.indexOf('/');
+                String model = slash > 0 ? session.path.substring(0, slash) : session.path;
+
+                uploadedModels.computeIfAbsent(player.getUuid(), (k) -> ConcurrentHashMap.newKeySet()).add(model);
                 BBSSynchronized.LOGGER.info("{} uploaded model file \"{}\"", player.getGameProfile().getName(), session.path);
             }
         });
@@ -618,8 +622,8 @@ public class ServerModelSync
          * resolve the authoritative count on the IO thread */
         submit(io, () ->
         {
-            AtomicInteger counter = uploadedCounts.remove(player.getUuid());
-            int uploaded = counter == null ? 0 : counter.get();
+            Set<String> models = uploadedModels.remove(player.getUuid());
+            int uploaded = models == null ? 0 : models.size();
 
             if (uploaded <= 0)
             {
@@ -628,12 +632,12 @@ public class ServerModelSync
 
             server.execute(() ->
             {
-                Text announcement = Text.translatable("bbs_synchronized.prefix").formatted(Formatting.AQUA)
+                Text announcement = Text.translatable("bbs_synchronized.prefix").styled((s) -> s.withColor(Colors.BLUE))
                     .append(Text.translatable("bbs_synchronized.broadcast.uploaded",
                         player.getGameProfile().getName(),
                         uploaded,
-                        Text.literal("/bbs model download").formatted(Formatting.WHITE)
-                    ).formatted(Formatting.GRAY));
+                        Text.literal("/bbs model download").styled((s) -> s.withColor(0xffffff))
+                    ).styled((s) -> s.withColor(0xdddddd)));
 
                 for (ServerPlayerEntity other : server.getPlayerManager().getPlayerList())
                 {

@@ -9,8 +9,8 @@ import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
+import mchorse.bbs_mod.utils.colors.Colors;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 
 /**
  * Registers the {@code /bbs model ...} subcommands. Brigadier merges the
@@ -40,14 +40,14 @@ public class SyncCommands
 
         if (player == null)
         {
-            ctx.getSource().sendError(Text.translatable("bbs_synchronized.command.players_only"));
+            ctx.getSource().sendError(Text.translatable("bbs_synchronized.command.players_only").styled((s) -> s.withColor(Colors.RED)));
 
             return null;
         }
 
         if (!ServerModelSync.isClientSynchronized(player))
         {
-            ctx.getSource().sendError(Text.translatable("bbs_synchronized.command.not_installed"));
+            ctx.getSource().sendError(Text.translatable("bbs_synchronized.command.not_installed").styled((s) -> s.withColor(Colors.RED)));
 
             return null;
         }
@@ -89,7 +89,7 @@ public class SyncCommands
 
     private static Text prefixed(String key)
     {
-        return Text.translatable("bbs_synchronized.prefix").formatted(Formatting.AQUA)
-            .append(Text.translatable(key).formatted(Formatting.GRAY));
+        return Text.translatable("bbs_synchronized.prefix").styled((s) -> s.withColor(Colors.BLUE))
+            .append(Text.translatable(key).styled((s) -> s.withColor(0xdddddd)));
     }
 }
