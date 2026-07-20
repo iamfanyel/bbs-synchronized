@@ -1,21 +1,21 @@
 package imfanyel.bbs_synchronized.server;
 
 import imfanyel.bbs_synchronized.BBSSynchronized;
-import imfanyel.bbs_synchronized.network.SyncPackets;
 import imfanyel.bbs_synchronized.network.SyncNetwork;
+import imfanyel.bbs_synchronized.network.SyncPackets;
 import imfanyel.bbs_synchronized.sync.HashCache;
 import imfanyel.bbs_synchronized.sync.ManifestEntry;
 import imfanyel.bbs_synchronized.sync.SyncExecutors;
 import imfanyel.bbs_synchronized.sync.SyncPaths;
 import imfanyel.bbs_synchronized.sync.TransferSession;
 import mchorse.bbs_mod.BBSMod;
+import mchorse.bbs_mod.utils.colors.Colors;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
-import mchorse.bbs_mod.utils.colors.Colors;
 import net.minecraft.text.Text;
 
 import java.io.File;
@@ -282,28 +282,45 @@ public class ServerModelSync
      */
     public static void sendManifest(ServerPlayerEntity player, byte reason)
     {
+        sendManifestTo(List.of(player), reason);
+    }
+
+    /**
+     * Same, but the manifest is built once and sent to every target — used by
+     * the auto-push after uploads so N players don't trigger N folder walks.
+     */
+    public static void sendManifestTo(List<ServerPlayerEntity> targets, byte reason)
+    {
         submit(workers, () ->
         {
             try
             {
                 List<ManifestEntry> manifest = hashes.buildManifest(getModelsFolder());
 
-                BBSSynchronized.LOGGER.info("Sending model manifest ({} file(s)) to {}", manifest.size(), player.getGameProfile().getName());
+                BBSSynchronized.LOGGER.info("Sending model manifest ({} file(s)) to {} player(s)", manifest.size(), targets.size());
 
                 synchronized (sendLock)
                 {
-                    SyncPackets.chunkManifest(manifest, SyncPackets.SAFE_S2C_BYTES, (slice, last) ->
-                        SyncNetwork.send(player, SyncPackets.CH_MANIFEST, (buf) ->
+                    for (ServerPlayerEntity player : targets)
+                    {
+                        if (player.isDisconnected())
                         {
-                            buf.writeByte(reason);
-                            buf.writeBoolean(last);
-                            SyncPackets.writeManifest(buf, slice);
-                        }));
+                            continue;
+                        }
+
+                        SyncPackets.chunkManifest(manifest, SyncPackets.SAFE_S2C_BYTES, (slice, last) ->
+                            SyncNetwork.send(player, SyncPackets.CH_MANIFEST, (buf) ->
+                            {
+                                buf.writeByte(reason);
+                                buf.writeBoolean(last);
+                                SyncPackets.writeManifest(buf, slice);
+                            }));
+                    }
                 }
             }
             catch (Exception e)
             {
-                BBSSynchronized.LOGGER.error("Failed to send model manifest to {}", player.getGameProfile().getName(), e);
+                BBSSynchronized.LOGGER.error("Failed to send model manifest", e);
             }
         });
     }
@@ -391,8 +408,9 @@ public class ServerModelSync
                 }
 
                 File file = SyncPaths.resolve(root, path);
+                final long fileSize = file == null ? -1 : file.length();
 
-                if (file == null || !file.isFile() || file.length() > SyncPackets.MAX_FILE_SIZE)
+                if (file == null || !file.isFile() || fileSize > SyncPackets.MAX_FILE_SIZE)
                 {
                     continue;
                 }
@@ -412,7 +430,7 @@ public class ServerModelSync
                 {
                     begin.writeInt(fileTid);
                     begin.writeString(path);
-                    begin.writeLong(file.length());
+                    begin.writeLong(fileSize);
                     begin.writeString(sha1);
                 });
 
@@ -632,16 +650,23 @@ public class ServerModelSync
                         Text.literal("/bbs model download").styled((s) -> s.withColor(0xffffff))
                     ).styled((s) -> s.withColor(0xdddddd)));
 
+                List<ServerPlayerEntity> pushTargets = new ArrayList<>();
+
                 for (ServerPlayerEntity other : server.getPlayerManager().getPlayerList())
                 {
                     other.sendMessage(announcement);
 
-                    /* Auto-push: everyone else receives the new models right
-                     * away through their normal additive sync */
                     if (other != player && isClientSynchronized(other))
                     {
-                        sendManifest(other, SyncPackets.REASON_JOIN);
+                        pushTargets.add(other);
                     }
+                }
+
+                /* Auto-push: everyone else receives the new models right away
+                 * through their normal additive sync (one manifest build) */
+                if (!pushTargets.isEmpty())
+                {
+                    sendManifestTo(pushTargets, SyncPackets.REASON_JOIN);
                 }
             });
         });
