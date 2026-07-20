@@ -25,7 +25,10 @@ public class SyncCommands
 
         bbs.then(CommandManager.literal("model")
             .then(CommandManager.literal("download").executes(SyncCommands::download))
-            .then(CommandManager.literal("upload").executes(SyncCommands::upload))
+            .then(CommandManager.literal("upload")
+                .executes((ctx) -> upload(ctx, false))
+                .then(CommandManager.literal("--force").executes((ctx) -> upload(ctx, true)))
+            )
         );
 
         dispatcher.register(bbs);
@@ -67,7 +70,7 @@ public class SyncCommands
         return 1;
     }
 
-    private static int upload(CommandContext<ServerCommandSource> ctx)
+    private static int upload(CommandContext<ServerCommandSource> ctx, boolean force)
     {
         ServerPlayerEntity player = requireSyncedPlayer(ctx);
 
@@ -76,8 +79,10 @@ public class SyncCommands
             return 0;
         }
 
-        ctx.getSource().sendFeedback(() -> prefixed("bbs_synchronized.command.uploading"), false);
-        ServerModelSync.requestUpload(player);
+        ctx.getSource().sendFeedback(() -> prefixed(force
+            ? "bbs_synchronized.command.uploading_all"
+            : "bbs_synchronized.command.uploading"), false);
+        ServerModelSync.requestUpload(player, force);
 
         return 1;
     }

@@ -5,6 +5,7 @@
     "bbs_synchronized.command.not_installed": "BBS Synchronized isn't installed on your client, so models can't be synchronized.",
     "bbs_synchronized.command.checking": "Checking for new models...",
     "bbs_synchronized.command.uploading": "Uploading your new models...",
+    "bbs_synchronized.command.uploading_all": "Uploading all of your models (overwriting the server's copies)...",
 
     "bbs_synchronized.broadcast.uploaded": "%s uploaded %s model file(s). Use %s to receive them.",
 
@@ -16,9 +17,10 @@
     "bbs_synchronized.sync.timeout": "Model download timed out — you can retry with /bbs model download.",
     "bbs_synchronized.sync.verify_failed": "Failed to verify \"%s\" — it was discarded.",
 
-    "bbs_synchronized.upload.skipped": "Skipped \"%s\" — it already exists on the server with different contents.",
+    "bbs_synchronized.upload.skipped": "Skipped \"%s\" — it already exists on the server with different contents. Use /bbs model upload --force to overwrite it.",
     "bbs_synchronized.upload.rejected": "The server rejected \"%s\".",
-    "bbs_synchronized.upload.nothing": "No new models to upload — the server already has all of your model files.",
+    "bbs_synchronized.upload.nothing": "No new models to upload — the server already has all of your model files. Use /bbs model upload --force to resend everything.",
+    "bbs_synchronized.upload.nothing_forced": "The server already has identical copies of all of your model files.",
     "bbs_synchronized.upload.uploading": "Uploading %s model file(s) (%s MB)...",
     "bbs_synchronized.upload.done": "Upload complete — sent %s file(s).",
     "bbs_synchronized.upload.failed": "Upload failed: %s",

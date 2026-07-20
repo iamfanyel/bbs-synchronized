@@ -5,6 +5,7 @@
     "bbs_synchronized.command.not_installed": "O BBS Synchronized não está instalado no seu cliente, então os modelos não podem ser sincronizados.",
     "bbs_synchronized.command.checking": "Verificando novos modelos...",
     "bbs_synchronized.command.uploading": "Enviando seus novos modelos...",
+    "bbs_synchronized.command.uploading_all": "Enviando todos os seus modelos (substituindo as cópias do servidor)...",
 
     "bbs_synchronized.broadcast.uploaded": "%s enviou %s arquivo(s) de modelo. Use %s para recebê-los.",
 
@@ -16,9 +17,10 @@
     "bbs_synchronized.sync.timeout": "O download dos modelos expirou — você pode tentar novamente com /bbs model download.",
     "bbs_synchronized.sync.verify_failed": "Falha ao verificar \"%s\" — o arquivo foi descartado.",
 
-    "bbs_synchronized.upload.skipped": "\"%s\" foi ignorado — já existe no servidor com conteúdo diferente.",
+    "bbs_synchronized.upload.skipped": "\"%s\" foi ignorado — já existe no servidor com conteúdo diferente. Use /bbs model upload --force para substituí-lo.",
     "bbs_synchronized.upload.rejected": "O servidor rejeitou \"%s\".",
-    "bbs_synchronized.upload.nothing": "Nenhum modelo novo para enviar — o servidor já tem todos os seus arquivos de modelo.",
+    "bbs_synchronized.upload.nothing": "Nenhum modelo novo para enviar — o servidor já tem todos os seus arquivos de modelo. Use /bbs model upload --force para reenviar tudo.",
+    "bbs_synchronized.upload.nothing_forced": "O servidor já tem cópias idênticas de todos os seus arquivos de modelo.",
     "bbs_synchronized.upload.uploading": "Enviando %s arquivo(s) de modelo (%s MB)...",
     "bbs_synchronized.upload.done": "Envio concluído — %s arquivo(s) enviado(s).",
     "bbs_synchronized.upload.failed": "Falha no envio: %s",
